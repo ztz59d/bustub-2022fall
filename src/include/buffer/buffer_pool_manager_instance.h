@@ -14,6 +14,7 @@
 
 #include <list>
 #include <mutex>  // NOLINT
+#include <shared_mutex>
 #include <unordered_map>
 
 #include "buffer/buffer_pool_manager.h"
@@ -177,5 +178,10 @@ class BufferPoolManagerInstance : public BufferPoolManager {
   }
 
   // TODO(student): You may add additional private members and helper functions
+  // locks are to protect pages' date_ in the frames.
+  void RLockPage(page_id_t page_id);
+  void WLockPage(page_id_t page_id);
+  void RUnLockPage(page_id_t page_id);
+  void WUnLockPage(page_id_t page_id);
 };
 }  // namespace bustub

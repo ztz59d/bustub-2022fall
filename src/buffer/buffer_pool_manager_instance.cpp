@@ -88,6 +88,7 @@ auto BufferPoolManagerInstance::FetchPgImp(page_id_t page_id) -> Page * {
 
   // find weather the frame is available.
   if (page_table_->Find(page_id, frame_id)) {
+    pages_[frame_id].pin_count_++;
     return &pages_[frame_id];
   }
 
@@ -195,5 +196,30 @@ auto BufferPoolManagerInstance::DeletePgImp(page_id_t page_id) -> bool {
 }
 
 auto BufferPoolManagerInstance::AllocatePage() -> page_id_t { return next_page_id_++; }
+
+void BufferPoolManagerInstance::RLockPage(page_id_t page_id) {
+  frame_id_t frame_id = -1;
+  BUSTUB_ENSURE(page_table_->Find(page_id, frame_id), "error in : BufferPoolManagerInstance::RLockPage()\n");
+
+  pages_[frame_id].RLatch();
+}
+void BufferPoolManagerInstance::WLockPage(page_id_t page_id) {
+  frame_id_t frame_id = -1;
+  BUSTUB_ENSURE(page_table_->Find(page_id, frame_id), "error in : BufferPoolManagerInstance::WLockPage()\n");
+
+  pages_[frame_id].WLatch();
+}
+void BufferPoolManagerInstance::RUnLockPage(page_id_t page_id) {
+  frame_id_t frame_id = -1;
+  BUSTUB_ENSURE(page_table_->Find(page_id, frame_id), "error in : BufferPoolManagerInstance::RUnLockPage()\n");
+
+  pages_[frame_id].RUnlatch();
+}
+void BufferPoolManagerInstance::WUnLockPage(page_id_t page_id) {
+  frame_id_t frame_id = -1;
+
+  BUSTUB_ENSURE(page_table_->Find(page_id, frame_id), "error in : BufferPoolManagerInstance::WUnLockPage()\n");
+  pages_[frame_id].WUnlatch();
+}
 
 }  // namespace bustub

@@ -11,6 +11,8 @@
 #pragma once
 
 #include <queue>
+#include <shared_mutex>
+#include <stack>
 #include <string>
 #include <vector>
 
@@ -82,6 +84,14 @@ class BPlusTree {
 
   void ToString(BPlusTreePage *page, BufferPoolManager *bpm) const;
 
+  bool InsertLeaf(LeafPage *page, const KeyType &key, const ValueType &value, Transaction *transaction = nullptr);
+  bool InsertLeafOverflow(LeafPage *page, const KeyType &key, const ValueType &value, page_id_t *new_page,
+                          KeyType *new_key, Transaction *transaction = nullptr);
+
+  bool InsertInternal(InternalPage *page, const KeyType &key, const page_id_t child_id,
+                      Transaction *transaction = nullptr);
+  bool InsertInternalOverflow(InternalPage *page, const KeyType &key, const page_id_t child_id, InternalPage *new_page,
+                              KeyType *new_key, Transaction *transaction = nullptr);
   // member variable
   std::string index_name_;
   page_id_t root_page_id_;
