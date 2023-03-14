@@ -49,6 +49,10 @@ class BPlusTreeInternalPage : public BPlusTreePage {
 
   auto Find(const KeyType &key) const -> int;
 
+  auto operator[](int index) -> MappingType &;
+
+  auto KeyCmp(const KeyType &lhs, const KeyType &rhs) const -> int;
+
  private:
   // Flexible array member for page data.
   MappingType array_[1];

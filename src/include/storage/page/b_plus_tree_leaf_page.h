@@ -64,6 +64,7 @@ class BPlusTreeLeafPage : public BPlusTreePage {
   auto Find(const KeyType &key) const -> int;
 
   auto operator[](int index) -> MappingType &;
+  auto KeyCmp(const KeyType &lhs, const KeyType &rhs) const -> int;
 
  private:
   page_id_t next_page_id_{INVALID_PAGE_ID};

@@ -26,17 +26,17 @@ auto BPLUSTREE_TYPE::IsEmpty() const -> bool {
   if (root_page_id_ == INVALID_PAGE_ID) {
     return true;
   }
-  Page *root_frame = buffer_pool_manager_->FetchPage(root_page_id_);
-  if (root_frame == nullptr) {
-    return true;
-  }
+  // Page *root_frame = buffer_pool_manager_->FetchPage(root_page_id_);
+  // if (root_frame == nullptr) {
+  //   return true;
+  // }
 
-  auto root = reinterpret_cast<LeafPage *>(root_frame->GetData());
-  bool result = root->IsLeafPage() && root->IsEmpty();
+  // LeafPage *root = reinterpret_cast<LeafPage *>(root_frame->GetData());
+  // bool result = root->IsLeafPage() && root->IsEmpty();
 
-  buffer_pool_manager_->UnpinPage(root_page_id_, false);
+  // buffer_pool_manager_->UnpinPage(root_page_id_, false);
 
-  return result;
+  return false;
 }
 /*****************************************************************************
  * SEARCH
@@ -62,12 +62,12 @@ auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result
   auto cur_page = reinterpret_cast<BPlusTreePage *>(cur_frame->GetData());
 
   while (cur_page != nullptr) {
-    if (cur_page->page_type_ == IndexPageType::INVALID_INDEX_PAGE) {
+    if (cur_page->GetPageType() == IndexPageType::INVALID_INDEX_PAGE) {
       buffer_pool_manager_->UnpinPage(cur_page_id, false);
       cur_frame->RUnlatch();
       return false;
 
-    } else if (cur_page->page_type_ == IndexPageType::INTERNAL_PAGE) {
+    } else if (cur_page->GetPageType() == IndexPageType::INTERNAL_PAGE) {
       InternalPage *cur_page_internal = reinterpret_cast<InternalPage *>(cur_page);
 
       // search to find child id
@@ -128,6 +128,14 @@ auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transaction *transaction) -> bool {
+  if (IsEmpty()) {
+    Page *root_frame = buffer_pool_manager_->NewPage(&root_page_id_);
+    LeafPage *root_page_leaf = reinterpret_cast<LeafPage *>(root_frame->GetData());
+    root_page_leaf->Init(root_page_id_, INVALID_PAGE_ID, leaf_max_size_);
+    InsertLeaf(root_page_leaf, key, value);
+    return true;
+  }
+
   std::stack<Page *> locked_frames;
   page_id_t cur_page_id = root_page_id_;
   Page *cur_frame = buffer_pool_manager_->FetchPage(cur_page_id);
@@ -138,7 +146,7 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
   cur_frame->WLatch();
   auto cur_page = reinterpret_cast<BPlusTreePage *>(cur_frame->GetData());
   while (cur_page != nullptr) {
-    if (cur_page->page_type_ == IndexPageType::INVALID_INDEX_PAGE) {
+    if (cur_page->GetPageType() == IndexPageType::INVALID_INDEX_PAGE) {
       // 当前节点无效，恢复原状，返回false。
       buffer_pool_manager_->UnpinPage(cur_page_id, false);
       cur_frame->WUnlatch();
@@ -150,7 +158,7 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
       return false;
 
       // 是中间的索引节点
-    } else if (cur_page->page_type_ == IndexPageType::INTERNAL_PAGE) {
+    } else if (cur_page->GetPageType() == IndexPageType::INTERNAL_PAGE) {
       InternalPage *cur_page_internal = reinterpret_cast<InternalPage *>(cur_page);
 
       // 如果当前节点未满，则插入后不会导致溢出，对上层节点造成影响。
@@ -161,6 +169,7 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
           locked_frames.pop();
         }
       }  // 如果父节点是满的，则还需要考虑新的父节点
+      // 子节点可能是满的，会影响当前节点
       locked_frames.push(cur_frame);
 
       // 找到下一个子节点
@@ -193,7 +202,7 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
         buffer_pool_manager_->UnpinPage(cur_page_id, false);
         cur_frame->WUnlatch();
         while (!locked_frames.empty()) {
-          buffer_pool_manager_->UnpinPage(locked_frames.top()->GetPageId());
+          buffer_pool_manager_->UnpinPage(locked_frames.top()->GetPageId(), false);
           locked_frames.top()->WUnlatch();
           locked_frames.pop();
         }
@@ -217,6 +226,26 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
         page_id_t new_page_id;
         KeyType new_key;
         done = InsertLeafOverflow(cur_page_leaf, key, value, &new_page_id, &new_key);
+
+        // 根节点就是叶子节点
+        if (cur_page_id == root_page_id_) {
+          page_id_t new_root_page_id;
+          Page *new_root_frame = buffer_pool_manager_->NewPage(&new_root_page_id);
+          new_root_frame->WLatch();
+          InternalPage *new_root_page = reinterpret_cast<InternalPage *>(new_root_frame->GetData());
+          new_root_page->Init(new_root_page_id, INVALID_PAGE_ID, internal_max_size_);
+
+          // 插入两个叶子节点。
+          new_root_page->SetValueAt(0, root_page_id_);
+          // new_root_page->IncreaseSize(1);
+          InsertInternal(new_root_page, new_key, new_page_id);
+
+          root_page_id_ = new_root_page_id;
+          UpdateRootPageId();
+          buffer_pool_manager_->UnpinPage(new_root_page_id, true);
+          new_root_frame->WUnlatch();
+        }
+
         buffer_pool_manager_->UnpinPage(cur_page_id, true);
         cur_frame->WUnlatch();
 
@@ -225,25 +254,37 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
           cur_frame = locked_frames.top();
           locked_frames.pop();
           cur_page_id = cur_frame->GetPageId();
-          cur_page = reinterpret_cast<BPlusTreePage *>(cur_frame->GetData());
+          InternalPage *cur_page_internal = reinterpret_cast<InternalPage *>(cur_frame->GetData());
 
-          bool = InsertInternalOverflow(cur_page, new_key, new_page_id, &new_page_id, &new_key);
+          // 如果当前节点是不满的呢？？？？？？？？？？？？？？
+          // 到了最后的节点
+          if (!cur_page_internal->IsFull()) {
+            done = InsertInternal(cur_page_internal, new_key, new_page_id);
+            buffer_pool_manager_->UnpinPage(cur_page_id, true);
+            cur_frame->WUnlatch();
+
+            // 重新设置parent_id
+            return locked_frames.empty();
+          }
 
           // 如果最后一个节点是根节点，且根节点是满的，要修改根节点；
+          done = InsertInternalOverflow(cur_page_internal, new_key, new_page_id, &new_page_id, &new_key);
           if (cur_page_id == root_page_id_) {
             page_id_t new_root_page_id;
             Page *new_root_frame = buffer_pool_manager_->NewPage(&new_root_page_id);
             new_root_frame->WLatch();
             InternalPage *new_root_page = reinterpret_cast<InternalPage *>(new_root_frame->GetData());
-            new_root_page->Init(new_root_page_id);
+            new_root_page->Init(new_root_page_id, INVALID_PAGE_ID, internal_max_size_);
 
             // 插入两个原本的根节点。
             new_root_page->SetValueAt(0, root_page_id_);
-            new_root_page->IncreaseSize(1);
-            InsertInternal(new_root_page_id, new_key, new_page_id);
+            // new_root_page->IncreaseSize(1);
+            InsertInternal(new_root_page, new_key, new_page_id);
 
             root_page_id_ = new_root_page_id;
             UpdateRootPageId();
+
+            // 重新设置parent_id
             buffer_pool_manager_->UnpinPage(new_root_page_id, true);
             new_root_frame->WUnlatch();
           }
@@ -251,9 +292,12 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
           buffer_pool_manager_->UnpinPage(cur_page_id, true);
           cur_frame->WUnlatch();
         }
+        return done;
       }
+      return done;
     }
   }
+  return true;
 }
 
 /*****************************************************************************
@@ -300,7 +344,7 @@ auto BPLUSTREE_TYPE::End() -> INDEXITERATOR_TYPE { return INDEXITERATOR_TYPE(); 
  * @return Page id of the root of this tree
  */
 INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::GetRootPageId() -> page_id_t { return 0; }
+auto BPLUSTREE_TYPE::GetRootPageId() -> page_id_t { return root_page_id_; }
 
 /*****************************************************************************
  * UTILITIES AND DEBUG
@@ -515,42 +559,56 @@ void BPLUSTREE_TYPE::ToString(BPlusTreePage *page, BufferPoolManager *bpm) const
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-bool BPLUSTREE_TYPE::InsertLeaf(LeafPage *page, const KeyType &key, const ValueType &value,
-                                Transaction *transaction = nullptr) {
+bool BPLUSTREE_TYPE::InsertLeaf(LeafPage *page, const KeyType &key, const ValueType &value, Transaction *transaction) {
   MappingType temp(key, value);
-  for (int i = 0; i < page->GetSize() + 1; i++) {
-    if (page->KeyAt(i) == key) {
-      return false;
-    }
-    if (page->KeyAt(i) < key) {
+
+  if (page->IsEmpty()) {
+    page->IncreaseSize(1);
+    (*page)[0] = temp;
+    return true;
+  }
+
+  int i = 0;
+  for (; i < page->GetSize(); i++) {
+    if (comparator_(page->KeyAt(i), temp.first) < 0) {
       continue;
     }
-
-    std::swap((*page)[i], temp);
+    MappingType temp_2 = (*page)[i];
+    (*page)[i] = temp;
+    temp = temp_2;
   }
   page->IncreaseSize(1);
+  (*page)[i] = temp;
+  return true;
 }
 
 INDEX_TEMPLATE_ARGUMENTS
 bool BPLUSTREE_TYPE::InsertInternal(InternalPage *page, const KeyType &key, const page_id_t child_id,
-                                    Transaction *transaction = nullptr) {
-  MappingType temp(key, child_id);
-  for (int i = 0; i < page->GetSize() + 1; i++) {
-    if (page->KeyAt(i) == key) {
-      return false;
-    }
-    if (page->KeyAt(i) < key) {
+                                    Transaction *transaction) {
+  std::pair<KeyType, page_id_t> temp(key, child_id);
+  if (page->IsEmpty()) {
+    page->IncreaseSize(1);
+    (*page)[1] = temp;
+    return true;
+  }
+
+  int i = 1;
+  for (; i < page->GetSize(); i++) {
+    if (comparator_(page->KeyAt(i), temp.first) < 0) {
       continue;
     }
-
-    std::swap((*page)[i], temp);
+    std::pair<KeyType, page_id_t> temp_2 = (*page)[i];
+    (*page)[i] = temp;
+    temp = temp_2;
   }
   page->IncreaseSize(1);
+  (*page)[i] = temp;
+  return true;
 }
 
 INDEX_TEMPLATE_ARGUMENTS
 bool BPLUSTREE_TYPE::InsertLeafOverflow(LeafPage *page, const KeyType &key, const ValueType &value, page_id_t *new_page,
-                                        KeyType *new_key, Transaction *transaction = nullptr) {
+                                        KeyType *new_key, Transaction *transaction) {
   // for (int i = 0; i < page->GetMaxSize(); i++) {
   //   if (page->KeyAt(i) == key) {
   //     return false;
@@ -561,30 +619,31 @@ bool BPLUSTREE_TYPE::InsertLeafOverflow(LeafPage *page, const KeyType &key, cons
   Page *frame = buffer_pool_manager_->NewPage(&new_page_id);
   frame->WLatch();
   LeafPage *new_leaf = reinterpret_cast<LeafPage *>(frame->GetData());
-  new_leaf->Init(new_page_id, page->parent_page_id_);
+  new_leaf->Init(new_page_id, page->GetParentPageId(), leaf_max_size_);
   *new_page = new_page_id;
 
-  int i = 0;
-  MappingType temp(key, value);
-
-  // 向上取整还是向下？？？
-  for (; i < page->GetMaxSize() / 2; i++) {
-    if (page->KeyAt(i) < temp.first) {
+  for (int i = 0; i < page->GetMaxSize(); i++) {
+    if (comparator_(page->KeyAt(i), temp.first) < 0) {
       continue;
     }
-    std::swap((*page)[i], temp);
-  }
-  page->SetSize(page->GetMaxSize() / 2);
-  *new_key = page->KeyAt(page->GetMaxSize() / 2 - 1);
+    MappingType temp_2 = (*page)[i];
+    (*page)[i] = temp;
+    temp = temp_2;
+  }  // 现在temp中存储的是最大值；
 
-  for (; i <= new_leaf->GetMaxSize(); i++) {
-    if (page->KeyAt(i) < temp.first) {
-      continue;
-    }
-    std::swap((*new_leaf)[i], temp);
+  // 后半部分复制进新节点中
+  for (int i = (page->GetMaxSize() + 1) / 2, j = 0; i < page->GetMaxSize(); i++, j++) {
+    new_leaf->IncreaseSize(1);
+    (*new_leaf)[j] = (*page)[i];
   }
-  new_leaf->SetSize(new_leaf->GetMaxSize() + 1 - page->GetMaxSize() / 2);
-  buffer_pool_manager_->UnpinPgImp(new_page_id, true);
+  (*new_leaf)[new_leaf->GetSize()] = temp;
+  new_leaf->IncreaseSize(1);
+
+  // 向上取整还是向下？？？new key 设置为旧节点的最后一个
+  page->SetSize((page->GetMaxSize() + 1) / 2);
+  *new_key = page->KeyAt((page->GetMaxSize() + 1) / 2 - 1);
+
+  buffer_pool_manager_->UnpinPage(new_page_id, true);
   frame->WUnlatch();
 
   return true;
@@ -592,40 +651,43 @@ bool BPLUSTREE_TYPE::InsertLeafOverflow(LeafPage *page, const KeyType &key, cons
 
 INDEX_TEMPLATE_ARGUMENTS
 bool BPLUSTREE_TYPE::InsertInternalOverflow(InternalPage *page, const KeyType &key, const page_id_t child_id,
-                                            InternalPage *new_page, KeyType *new_key,
-                                            Transaction *transaction = nullptr) {
+                                            page_id_t *new_page, KeyType *new_key, Transaction *transaction) {
   // for (int i = 0; i < page->GetMaxSize(); i++) {
   //   if (page->KeyAt(i) == key) {
-  //     return false;
+  //     return false;s
   //   }
   // }
-  MappingType temp(key, child_id);
+  std::pair<KeyType, page_id_t> temp(key, child_id);
   page_id_t new_page_id;
   Page *frame = buffer_pool_manager_->NewPage(&new_page_id);
   frame->WLatch();
   InternalPage *new_inter = reinterpret_cast<InternalPage *>(frame->GetData());
-  new_inter->Init(new_page_id, page->parent_page_id_);
+  new_inter->Init(new_page_id, page->GetParentPageId(), internal_max_size_);
   *new_page = new_page_id;
 
-  int i = 0;
-  MappingType temp(key, child_id);
-  for (; i < page->GetMaxSize() / 2; i++) {
-    if (page->KeyAt(i) < temp.first) {
+  for (int i = 1; i < page->GetMaxSize(); i++) {
+    if (comparator_(page->KeyAt(i), temp.first) < 0) {
       continue;
     }
-    std::swap((*page)[i], temp);
-  }
-  page->SetSize(page->GetMaxSize() / 2);
-  *new_key = page->KeyAt(page->GetMaxSize() / 2 - 1);
+    std::pair<KeyType, page_id_t> temp_2 = (*page)[i];
+    (*page)[i] = temp;
+    temp = temp_2;
+  }  // 现在temp中存储的是最大值；
 
-  for (; i <= new_leaf->GetMaxSize(); i++) {
-    if (page->KeyAt(i) < temp.first) {
-      continue;
-    }
-    std::swap((*new_inter)[i], temp);
+  // 后半部分复制进新节点中
+  for (int i = (page->GetMaxSize() + 1) / 2, j = 0; i < page->GetMaxSize(); i++, j++) {
+    (*new_inter)[j] = (*page)[i];
+    new_inter->IncreaseSize(1);
   }
-  new_leaf->SetSize(new_leaf->GetMaxSize() + 1 - page->GetMaxSize() / 2);
+  (*new_inter)[new_inter->GetSize() - 1] = temp;
+
+  // 向上取整还是向下？？？new key 设置为旧节点的最后一个
+  page->SetSize((page->GetMaxSize() + 1) / 2);
+  *new_key = page->KeyAt((page->GetMaxSize() + 1) / 2 - 1);
+
+  buffer_pool_manager_->UnpinPage(new_page_id, true);
   frame->WUnlatch();
+
   return true;
 }
 

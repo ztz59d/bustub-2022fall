@@ -28,11 +28,11 @@ namespace bustub {
  */
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_LEAF_PAGE_TYPE::Init(page_id_t page_id, page_id_t parent_id, int max_size) {
-  page_type_ = IndexPageType::LEAF_PAGE;
-  size_ = 0;
-  max_size_ = max_size;
-  parent_page_id_ = parent_id;
-  page_id_ = page_id;
+  SetPageType(IndexPageType::LEAF_PAGE);
+  SetSize(0);
+  SetMaxSize(max_size);
+  SetParentPageId(parent_id);
+  SetPageId(page_id);
 }
 
 /**
@@ -51,26 +51,26 @@ void B_PLUS_TREE_LEAF_PAGE_TYPE::SetNextPageId(page_id_t next_page_id) { next_pa
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_LEAF_PAGE_TYPE::KeyAt(int index) const -> KeyType {
   // replace with your own code
-  BUSTUB_ENSURE(index >= 0 && index < size, "index must be greater than 0 and smaller than current size");
+  BUSTUB_ENSURE(index >= 0 && index < GetMaxSize(), "index must be greater than 0 and smaller than current size");
   return array_[index].first;
 }
 
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_LEAF_PAGE_TYPE::ValueAt(int index) const -> ValueType {
   // replace with your own code
-  BUSTUB_ENSURE(index >= 0 && index < size, "index must be greater than 0 and smaller than current size");
+  BUSTUB_ENSURE(index >= 0 && index < GetMaxSize(), "index must be greater than 0 and smaller than current size");
   return array_[index].second;
 }
 
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_LEAF_PAGE_TYPE::SetKeyAt(int index, const KeyType &key) {
-  BUSTUB_ENSURE(index >= 0 && index < size, "index must be greater than 0 and smaller than current size");
+  BUSTUB_ENSURE(index >= 0 && index < GetMaxSize(), "index must be greater than 0 and smaller than current size");
   array_[index].first = key;
 }
 
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_LEAF_PAGE_TYPE::SetValueAt(int index, const ValueType &value) {
-  BUSTUB_ENSURE(index >= 0 && index < size, "index must be greater than 0 and smaller than current size");
+  BUSTUB_ENSURE(index >= 0 && index < GetMaxSize(), "index must be greater than 0 and smaller than current size");
   array_[index].second = value;
 }
 
@@ -79,8 +79,8 @@ auto B_PLUS_TREE_LEAF_PAGE_TYPE::Find(const KeyType &key) const -> int {
   if (IsEmpty()) {
     return -1;
   }
-  for (int i = 0; i < size_; ++i) {
-    if (KeyAt(i) == key) {
+  for (int i = 0; i < GetSize(); ++i) {
+    if (KeyCmp(key, KeyAt(i)) == 0) {
       return i;
     }
   }
@@ -88,13 +88,27 @@ auto B_PLUS_TREE_LEAF_PAGE_TYPE::Find(const KeyType &key) const -> int {
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-auto B_PLUS_TREE_LEAF_PAGE_TYPE::IsEmpty() const -> bool { return size_ == 0; }
+auto B_PLUS_TREE_LEAF_PAGE_TYPE::IsEmpty() const -> bool { return GetSize() == 0; }
 
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_LEAF_PAGE_TYPE::operator[](int index) -> MappingType & {
-  BUSTUB_ENSURE(0 <= index && index < size_, "index out of bounds");
+  BUSTUB_ENSURE(0 <= index && index < GetMaxSize(), "index out of bounds");
   return array_[index];
 };
+
+INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_LEAF_PAGE_TYPE::KeyCmp(const KeyType &lhs, const KeyType &rhs) const -> int {
+  const unsigned char *left = reinterpret_cast<const unsigned char *>(&lhs);
+  const unsigned char *right = reinterpret_cast<const unsigned char *>(&rhs);
+  for (int i = sizeof(lhs) - 1; i >= 0; i--) {
+    if (left[i] < right[i]) {
+      return -1;
+    } else if (left[i] > right[i]) {
+      return 1;
+    }
+  }
+  return 0;
+}
 
 template class BPlusTreeLeafPage<GenericKey<4>, RID, GenericComparator<4>>;
 template class BPlusTreeLeafPage<GenericKey<8>, RID, GenericComparator<8>>;

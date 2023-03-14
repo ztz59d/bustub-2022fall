@@ -26,11 +26,11 @@ namespace bustub {
  */
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Init(page_id_t page_id, page_id_t parent_id, int max_size) {
-  page_type_ = IndexPageType::INTERNAL_PAGE;
-  size_ = 1;
-  max_size_ = max_size;
-  parent_page_id_ = parent_id;
-  page_id_ = page_id;
+  SetPageType(IndexPageType::INTERNAL_PAGE);
+  SetSize(1);
+  SetMaxSize(max_size);
+  SetParentPageId(parent_id);
+  SetPageId(page_id);
 } /*
    * Helper method to get/set the key associated with input "index"(a.k.a
    * array offset)
@@ -38,75 +38,68 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Init(page_id_t page_id, page_id_t parent_id
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::KeyAt(int index) const -> KeyType {
   // replace with your own code
-  BUSTUB_ENSURE(index > 0 && index < size, "index must be greater than 0 and smaller than current size");
   return array_[index].first;
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetKeyAt(int index, const KeyType &key) {
-  BUSTUB_ENSURE(index > 0 && index < size, "index must be greater than 0 and smaller than current size");
-  array_[index].first = key;
-}
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetKeyAt(int index, const KeyType &key) { array_[index].first = key; }
 
 /*
  * Helper method to get the value associated with input "index"(a.k.a array
  * offset)s
  */
 INDEX_TEMPLATE_ARGUMENTS
-auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::ValueAt(int index) const -> ValueType {
-  BUSTUB_ENSURE(index >= 0 && index < size, "index must be greater than 0 and smaller than current size");
-  return array_[index].second;
-}
+auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::ValueAt(int index) const -> ValueType { return array_[index].second; }
 
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetValueAt(int index, const ValueType &value) {
-  BUSTUB_ENSURE(index >= 0 && index < size, "index must be greater than 0 and smaller than current size");
-  array_[index].second = key;
-}
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetValueAt(int index, const ValueType &value) { array_[index].second = value; }
+
+// INDEX_TEMPLATE_ARGUMENTS
+// auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::Insert(const KeyType &key, const ValueType &value) -> bool {
+//   if (IsFull()) {
+//     return false;
+//   }
+//   int index = Find(key);
+//   if (index < 0) {
+//     return false;
+//   }
+//   for (int i = index + 1; i < size_; i++) {
+//     array_[i + 1] = array_[i];
+//   }
+//   array_[index + 1] = std::pair<KeyType, ValueType>(key, value);
+//   size_++;
+//   return true;
+// }
+
+// INDEX_TEMPLATE_ARGUMENTS
+// auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::Delete(const KeyType &key) -> bool {
+//   if (IsEmpty()) {
+//     return false;
+//   }
+//   int left = 0, right = size_;
+//   int middle = -1;
+//   while (left != right) {
+//     middle = left + (right - left) / 2;
+//     if (KeyAt(middle) == key) {
+//       break;
+//     } else if (key < KeyAt(middle)) {
+//       right = middle;
+//     } else {
+//       left = middle + 1;
+//     }
+//   }
+//   if (middle < 0) {
+//     return false;
+//   }
+//   for (int i = middle; i < size_ - 1; i++) {
+//     array_[i] = array_[i + 1];
+//   }
+//   size_--;
+//   return true;
+// }
 
 INDEX_TEMPLATE_ARGUMENTS
-auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::Insert(const KeyType &key, const ValueType &value) -> bool {
-  if (IsFull()) {
-    return false;
-  }
-  int index = Find(key);
-  if (index < 0) {
-    return false;
-  }
-  for (int i = index + 1; i < size_; i++) {
-    array_[i + 1] = array_[i];
-  }
-  array_[index + 1] = std::pair<KeyType, ValueType>(key, value);
-  size_++;
-  return true;
-}
-
-INDEX_TEMPLATE_ARGUMENTS
-auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::Delete(const KeyType &key) -> bool {
-  if (IsEmpty()) {
-    return false;
-  }
-  int left = 0, right = size_;
-  int middle = -1;
-  while (left != right) {
-    middle = left + (right - left) / 2;
-    if (KeyAt(middle) == key) {
-      break;
-    } else if (key < KeyAt(middle)) {
-      right = middle;
-    } else {
-      left = middle + 1;
-    }
-  }
-  if (middle < 0) {
-    return false;
-  }
-  for (int i = middle; i < size_ - 1; i++) {
-    array_[i] = array_[i + 1];
-  }
-  size_--;
-  return true;
-}
+auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::operator[](int index) -> MappingType & { return array_[index]; };
 
 // INDEX_TEMPLATE_ARGUMENTS
 // auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::Find(const KeyType &key) const -> int {
@@ -134,15 +127,30 @@ auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::Find(const KeyType &key) const -> int {
   if (IsEmpty()) {
     return -1;
   }
-  for (int i = 1; i < size_; ++i) {
-    if (KeyAt(i) >= key) {
+  for (int i = 1; i < GetSize(); ++i) {
+    if (KeyCmp(key, KeyAt(i)) <= 0) {
       return i - 1;
     }
   }
-  return size_ - 1;
+  return GetSize() - 1;
 }
+
 INDEX_TEMPLATE_ARGUMENTS
-auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::IsEmpty() const -> bool { return size_ == 1; }
+auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::KeyCmp(const KeyType &lhs, const KeyType &rhs) const -> int {
+  const unsigned char *left = reinterpret_cast<const unsigned char *>(&lhs);
+  const unsigned char *right = reinterpret_cast<const unsigned char *>(&rhs);
+  for (int i = sizeof(lhs) - 1; i >= 0; i--) {
+    if (left[i] < right[i]) {
+      return -1;
+    } else if (left[i] > right[i]) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::IsEmpty() const -> bool { return GetSize() == 1; }
 // valuetype for internalNode should be page id_t
 template class BPlusTreeInternalPage<GenericKey<4>, page_id_t, GenericComparator<4>>;
 template class BPlusTreeInternalPage<GenericKey<8>, page_id_t, GenericComparator<8>>;

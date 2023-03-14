@@ -94,15 +94,18 @@ void LRUKReplacer::SetEvictable(frame_id_t frame_id, bool set_evictable) {
     return;
   }
 
-  auto tmp = *(it->second);
+  frame_info_t tmp = *(it->second);
   // map_.erase(it);
 
   if (!tmp.evitable_ && set_evictable) {
     none_evictable_.erase(it->second);
+    tmp.evitable_ = set_evictable;
+
     if (Size() == replacer_size_) {
       frame_id_t id;
       BUSTUB_ASSERT(Evict(&id), true);
     }
+
     if (tmp.times_hit_ >= k_) {
       map_[frame_id] = buffered_list_.emplace(tmp).first;
     } else {

@@ -20,7 +20,7 @@
 
 namespace bustub {
 
-TEST(BPlusTreeTests, DISABLED_InsertTest1) {
+TEST(BPlusTreeTests, InsertTest1) {
   // create KeyComparator and index schema
   auto key_schema = ParseCreateStatement("a bigint");
   GenericComparator<8> comparator(key_schema.get());
@@ -51,6 +51,8 @@ TEST(BPlusTreeTests, DISABLED_InsertTest1) {
   ASSERT_NE(root_page, nullptr);
   ASSERT_TRUE(root_page->IsLeafPage());
 
+  // tree.Print(bpm);
+
   auto root_as_leaf = reinterpret_cast<BPlusTreeLeafPage<GenericKey<8>, RID, GenericComparator<8>> *>(root_page);
   ASSERT_EQ(root_as_leaf->GetSize(), 1);
   ASSERT_EQ(comparator(root_as_leaf->KeyAt(0), index_key), 0);
@@ -64,7 +66,7 @@ TEST(BPlusTreeTests, DISABLED_InsertTest1) {
   remove("test.log");
 }
 
-TEST(BPlusTreeTests, DISABLED_InsertTest2) {
+TEST(BPlusTreeTests, InsertTest2) {
   // create KeyComparator and index schema
   auto key_schema = ParseCreateStatement("a bigint");
   GenericComparator<8> comparator(key_schema.get());
@@ -78,6 +80,7 @@ TEST(BPlusTreeTests, DISABLED_InsertTest2) {
   // create transaction
   auto *transaction = new Transaction(0);
 
+  // std::cout << "line 84" << std::endl;
   // create and fetch header_page
   page_id_t page_id;
   auto header_page = bpm->NewPage(&page_id);
@@ -89,7 +92,13 @@ TEST(BPlusTreeTests, DISABLED_InsertTest2) {
     rid.Set(static_cast<int32_t>(key >> 32), value);
     index_key.SetFromInteger(key);
     tree.Insert(index_key, rid, transaction);
+    // tree.Print(bpm);
+    // std::cout << "################################################################" << std::endl;
   }
+  tree.Print(bpm);
+  // std::string result;
+  // tree.Draw(bpm, result);
+  // std::cout << result << std::endl;
 
   std::vector<RID> rids;
   for (auto key : keys) {
@@ -141,11 +150,16 @@ TEST(BPlusTreeTests, DISABLED_InsertTest3) {
   // create transaction
   auto *transaction = new Transaction(0);
 
+  // std::cout << "line 150" << std::endl;
+  // tree.Print(bpm);
+
   // create and fetch header_page
   page_id_t page_id;
   auto header_page = bpm->NewPage(&page_id);
   ASSERT_EQ(page_id, HEADER_PAGE_ID);
   (void)header_page;
+
+  // tree.Print(bpm);
 
   std::vector<int64_t> keys = {5, 4, 3, 2, 1};
   for (auto key : keys) {
@@ -154,6 +168,8 @@ TEST(BPlusTreeTests, DISABLED_InsertTest3) {
     index_key.SetFromInteger(key);
     tree.Insert(index_key, rid, transaction);
   }
+
+  // tree.Print(bpm);
 
   std::vector<RID> rids;
   for (auto key : keys) {
@@ -166,6 +182,8 @@ TEST(BPlusTreeTests, DISABLED_InsertTest3) {
     EXPECT_EQ(rids[0].GetSlotNum(), value);
   }
 
+  // tree.Print(bpm);
+
   int64_t start_key = 1;
   int64_t current_key = start_key;
   index_key.SetFromInteger(start_key);
@@ -175,6 +193,8 @@ TEST(BPlusTreeTests, DISABLED_InsertTest3) {
     EXPECT_EQ(location.GetSlotNum(), current_key);
     current_key = current_key + 1;
   }
+
+  // tree.Print(bpm);
 
   EXPECT_EQ(current_key, keys.size() + 1);
 
